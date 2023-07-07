@@ -1,57 +1,50 @@
-#!/usr/bin/env python3
-
-from flask import Flask, make_response, jsonify, request, session
-from flask_migrate import Migrate
+from flask import Flask, request, jsonify, session
 from flask_restful import Api, Resource
 
-from models import db, Article, User
-
 app = Flask(__name__)
-app.secret_key = b'Y\xf1Xz\x00\xad|eQ\x80t \xca\x1a\x10K'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.json.compact = False
-
-migrate = Migrate(app, db)
-
-db.init_app(app)
-
+app.secret_key = 'your_secret_key'
 api = Api(app)
 
-class ClearSession(Resource):
 
+class LoginResource(Resource):
+    def post(self):
+        data = request.get_json()
+        username = data.get('username')
+        
+        # Retrieve the user by username (assuming you have a user database)
+        user = get_user_by_username(username)
+        
+        if user:
+            # Set the session's user_id value to the user's id
+            session['user_id'] = user.id
+            return jsonify(user), 200
+        else:
+            return {'message': 'Invalid username'}, 401
+
+
+class LogoutResource(Resource):
     def delete(self):
-    
-        session['page_views'] = None
-        session['user_id'] = None
+        if 'user_id' in session:
+            # Remove the user_id value from the session
+            session.pop('user_id')
+        
+        return '', 204
 
-        return {}, 204
 
-class IndexArticle(Resource):
-    
+class CheckSessionResource(Resource):
     def get(self):
-        articles = [article.to_dict() for article in Article.query.all()]
-        return articles, 200
+        if 'user_id' in session:
+            # Return the user as JSON with a 200 status code
+            user_id = session['user_id']
+            user = get_user_by_id(user_id)
+            return jsonify(user), 200
+        else:
+            return '', 401
 
-class ShowArticle(Resource):
 
-    def get(self, id):
-        session['page_views'] = 0 if not session.get('page_views') else session.get('page_views')
-        session['page_views'] += 1
-
-        if session['page_views'] <= 3:
-
-            article = Article.query.filter(Article.id == id).first()
-            article_json = jsonify(article.to_dict())
-
-            return make_response(article_json, 200)
-
-        return {'message': 'Maximum pageview limit reached'}, 401
-
-api.add_resource(ClearSession, '/clear')
-api.add_resource(IndexArticle, '/articles')
-api.add_resource(ShowArticle, '/articles/<int:id>')
-
+api.add_resource(LoginResource, '/login')
+api.add_resource(LogoutResource, '/logout')
+api.add_resource(CheckSessionResource, '/check_session')
 
 if __name__ == '__main__':
-    app.run(port=5555, debug=True)
+    app.run(port=5555)
